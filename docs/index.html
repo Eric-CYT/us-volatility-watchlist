@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>美股波動率觀察清單</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--text:#16191d;--muted:#687280;--line:#e2e6ea;--accent:#2457d6;--accent-bg:#e8eefc;--up:#c62828;--down:#18794e;--head:#f0f2f5}
+@media (prefers-color-scheme:dark){:root{--bg:#111418;--card:#191d23;--text:#e7eaee;--muted:#98a2ae;--line:#2a3038;--accent:#7ea2ff;--accent-bg:#1f2b47;--up:#ff7b72;--down:#4cc38a;--head:#1f242b}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,"Segoe UI","Microsoft JhengHei","PingFang TC",sans-serif}
+main{max-width:1280px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:22px;margin:0 0 2px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:16px}
+.demo{background:#fff4d6;color:#6b4a00;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:13px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:4px}
+.field>span{font-size:12px;color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:transparent;color:var(--text);padding:6px 12px;font:inherit;cursor:pointer;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed=true]{background:var(--accent-bg);color:var(--accent);font-weight:600}
+input,select{font:inherit;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+input[type=search]{width:190px}
+input[type=number]{width:110px}
+button:focus-visible,input:focus-visible,select:focus-visible,th:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.wrap{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:860px}
+th,td{padding:8px 12px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+th{background:var(--head);font-size:12px;font-weight:600;color:var(--muted);position:sticky;top:0}
+th.sortable{cursor:pointer;user-select:none}
+th.sortable:hover{color:var(--text)}
+th.on{color:var(--accent)}
+th:nth-child(-n+3),td:nth-child(-n+3){text-align:left}
+td.name{max-width:260px;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+td.sym{font-weight:600}
+td.sym a{color:inherit;text-decoration:none}
+td.sym a:hover{color:var(--accent);text-decoration:underline}
+.tag{font-size:11px;border:1px solid var(--line);border-radius:4px;padding:0 4px;margin-left:6px;color:var(--muted);font-weight:400}
+.d{display:block;font-size:11px;color:var(--muted)}
+.up{color:var(--up)}.down{color:var(--down)}
+tbody tr:hover{background:var(--head)}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;color:var(--muted);font-size:13px}
+.pager button{font:inherit;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 12px;cursor:pointer}
+.pager button:disabled{opacity:.4;cursor:default}
+.note{color:var(--muted);font-size:12px;margin-top:16px;line-height:1.7}
+.empty{padding:40px;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <h1>美股波動率觀察清單</h1>
+  <div class="sub" id="sub">載入中…</div>
+  <div class="demo" id="demo" hidden>目前顯示的是<b>示範用假資料</b>。GitHub Actions 第一次執行後會換成真實資料。</div>
+
+  <div class="panel">
+    <div class="field"><span>指標</span><div class="seg" id="metric"></div></div>
+    <div class="field"><span>排序依據</span><div class="seg" id="mode"></div></div>
+    <div class="field"><span>類型</span><div class="seg" id="type"></div></div>
+    <div class="field" id="brokerField" hidden><span>券商</span><select id="broker"></select></div>
+    <div class="field"><span>搜尋代號／名稱</span><input type="search" id="q" placeholder="例如 NVDA"></div>
+    <div class="field"><span>最低股價 (USD)</span><input type="number" id="minPrice" min="0" step="0.5" value="1"></div>
+    <div class="field"><span>最低日均成交額 (百萬 USD)</span><input type="number" id="minVol" min="0" step="0.5" value="1"></div>
+  </div>
+
+  <div class="wrap"><table>
+    <thead><tr id="head"></tr></thead>
+    <tbody id="body"></tbody>
+  </table><div class="empty" id="empty" hidden>沒有符合條件的股票</div></div>
+
+  <div class="foot">
+    <span id="count"></span>
+    <span class="pager"><button id="prev">上一頁</button> <span id="page"></span> <button id="next">下一頁</button></span>
+  </div>
+
+  <div class="note">
+    <b>週期</b>：日＝最近 1 個交易日、3日＝3 個交易日、週＝5 個交易日、月＝21 個交易日。每格上方是最近一期的數值，下方小字是與「前一個同長度週期」相比的變化（百分點）。<br>
+    <b>振幅</b>＝（期間最高價 − 最低價）÷ 期間開始前一日收盤價。<b>歷史波動率</b>＝期間內每日對數報酬率的標準差 × √252（年化；單日無法計算，3 日只有 3 個樣本，僅供參考）。<b>漲跌幅</b>＝期末收盤價 ÷ 期間開始前一日收盤價 − 1。<br>
+    價格為還原權息後的日線（Yahoo Finance）；日均成交額為近 20 日平均。紅色表示上升、綠色表示下降。資料僅供參考，非投資建議。
+  </div>
+</main>
+
+<script>
+const METRICS=[["amp","振幅"],["hv","歷史波動率"],["ret","漲跌幅"]];
+const WIN=["日","3日","週","月"];
+const S={metric:0,mode:"val",type:"all",broker:0,q:"",minPrice:1,minVol:1,sortCol:"w2",dir:-1,page:0};
+const PAGE=100;
+let D=null;
+const $=id=>document.getElementById(id);
+
+const cur=(r,w)=>r[7+S.metric*8+w], prev=(r,w)=>r[7+S.metric*8+4+w];
+const delta=(r,w)=>{const a=cur(r,w),b=prev(r,w);return a==null||b==null?null:a-b};
+const pct=(v,sign)=>v==null?"—":(sign&&v>0?"+":"")+(v*100).toFixed(2)+"%";
+const money=v=>v>=1e9?(v/1e9).toFixed(2)+"B":v>=1e6?(v/1e6).toFixed(1)+"M":v>=1e3?(v/1e3).toFixed(0)+"K":String(Math.round(v));
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function seg(id,opts,key){
+  const el=$(id);
+  el.innerHTML=opts.map(([v,t])=>`<button type="button" data-v="${v}">${t}</button>`).join("");
+  const sync=()=>el.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v)===String(S[key])));
+  el.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+    S[key]=isNaN(b.dataset.v)?b.dataset.v:+b.dataset.v;S.page=0;sync();render()});
+  sync();
+}
+
+function sortVal(r){
+  const c=S.sortCol;
+  if(c==="sym")return r[0]; if(c==="close")return r[4]; if(c==="dvol")return r[5];
+  const w=+c.slice(1); return S.mode==="val"?cur(r,w):delta(r,w);
+}
+
+function rows(){
+  const q=S.q.trim().toUpperCase();
+  const out=D.rows.filter(r=>
+    (S.type==="all"||(S.type==="etf")===!!r[3]) &&
+    r[4]>=S.minPrice && r[5]>=S.minVol*1e6 &&
+    (!S.broker||(r[6]&S.broker)) &&
+    (!q||r[0].includes(q)||r[1].toUpperCase().includes(q)));
+  out.sort((a,b)=>{
+    const x=sortVal(a),y=sortVal(b);
+    if(x==null&&y==null)return 0; if(x==null)return 1; if(y==null)return -1;   // blanks always last
+    return (x<y?-1:x>y?1:0)*S.dir;
+  });
+  return out;
+}
+
+function render(){
+  const cols=[["sym","代號"],[null,"名稱"],[null,"交易所"],["close","收盤價"],["dvol","日均成交額"],...WIN.map((t,i)=>["w"+i,t])];
+  $("head").innerHTML=cols.map(([k,t])=>k
+    ?`<th class="sortable${S.sortCol===k?" on":""}" data-k="${k}" tabindex="0" aria-sort="${S.sortCol===k?(S.dir<0?"descending":"ascending"):"none"}">${t}${S.sortCol===k?(S.dir<0?" ▼":" ▲"):""}</th>`
+    :`<th>${t}</th>`).join("");
+  const all=rows(), pages=Math.max(1,Math.ceil(all.length/PAGE));
+  S.page=Math.min(S.page,pages-1);
+  const isRet=S.metric===2;
+  $("body").innerHTML=all.slice(S.page*PAGE,(S.page+1)*PAGE).map(r=>{
+    const cells=WIN.map((_,w)=>{
+      const v=cur(r,w),d=delta(r,w);
+      const vc=isRet&&v?(v>0?"up":"down"):"";
+      const dc=d?(d>0?"up":"down"):"";
+      return `<td><span class="${vc}">${pct(v,isRet)}</span><span class="d ${dc}">${d==null?"":pct(d,true).replace("%"," pt")}</span></td>`;
+    }).join("");
+    return `<tr><td class="sym"><a href="https://finance.yahoo.com/quote/${encodeURIComponent(r[0].replace(".","-"))}" target="_blank" rel="noopener">${esc(r[0])}</a>${r[3]?'<span class="tag">ETF</span>':""}</td><td class="name" title="${esc(r[1])}">${esc(r[1])}</td><td>${esc(r[2])}</td><td>${r[4].toFixed(2)}</td><td>${money(r[5])}</td>${cells}</tr>`;
+  }).join("");
+  $("empty").hidden=all.length>0;
+  $("count").textContent=`符合 ${all.length.toLocaleString()} 檔／共 ${D.rows.length.toLocaleString()} 檔`;
+  $("page").textContent=`${S.page+1} / ${pages}`;
+  $("prev").disabled=S.page===0; $("next").disabled=S.page>=pages-1;
+}
+
+function headClick(e){
+  const th=e.target.closest("th.sortable"); if(!th)return;
+  if(e.type==="keydown"&&e.key!=="Enter"&&e.key!==" ")return;
+  e.preventDefault();
+  const k=th.dataset.k;
+  if(S.sortCol===k)S.dir=-S.dir; else{S.sortCol=k;S.dir=k==="sym"?1:-1}
+  S.page=0; render();
+  const again=$("head").querySelector(`[data-k="${k}"]`); if(e.type==="keydown"&&again)again.focus();
+}
+
+fetch("data.json",{cache:"no-store"}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()}).then(d=>{
+  D=d;
+  const upd=new Date(d.updated);
+  $("sub").textContent=`資料日期 ${d.asof}（美股收盤）．更新於 ${upd.toLocaleString("zh-TW",{hour12:false})}`;
+  $("demo").hidden=!d.demo;
+  seg("metric",METRICS.map(([,t],i)=>[i,t]),"metric");
+  seg("mode",[["val","數值"],["chg","較前期變化"]],"mode");
+  seg("type",[["all","全部"],["stock","股票"],["etf","ETF"]],"type");
+  if(d.brokers.length){
+    $("brokerField").hidden=false;
+    $("broker").innerHTML=`<option value="0">不限</option>`+d.brokers.map((b,i)=>`<option value="${1<<i}">${esc(b)}</option>`).join("");
+    $("broker").onchange=e=>{S.broker=+e.target.value;S.page=0;render()};
+  }
+  $("q").oninput=e=>{S.q=e.target.value;S.page=0;render()};
+  $("minPrice").oninput=e=>{S.minPrice=+e.target.value||0;S.page=0;render()};
+  $("minVol").oninput=e=>{S.minVol=+e.target.value||0;S.page=0;render()};
+  $("head").addEventListener("click",headClick); $("head").addEventListener("keydown",headClick);
+  $("prev").onclick=()=>{S.page--;render()}; $("next").onclick=()=>{S.page++;render()};
+  render();
+}).catch(err=>{$("sub").textContent="無法載入 data.json（"+err.message+"）。請確認 GitHub Actions 已成功執行。"});
+</script>
+</body>
+</html>
