@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>美股波動率觀察清單</title>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--text:#16191d;--muted:#687280;--line:#e2e6ea;--accent:#2457d6;--accent-bg:#e8eefc;--up:#c62828;--down:#18794e;--head:#f0f2f5}
-@media (prefers-color-scheme:dark){:root{--bg:#111418;--card:#191d23;--text:#e7eaee;--muted:#98a2ae;--line:#2a3038;--accent:#7ea2ff;--accent-bg:#1f2b47;--up:#ff7b72;--down:#4cc38a;--head:#1f242b}}
+:root{--bg:#f6f7f9;--card:#fff;--text:#16191d;--muted:#687280;--line:#e2e6ea;--accent:#2457d6;--accent-bg:#e8eefc;--up:#c62828;--down:#18794e;--head:#f0f2f5;--seq:36,87,214;--up-rgb:198,40,40;--down-rgb:24,121,78}
+@media (prefers-color-scheme:dark){:root{--bg:#111418;--card:#191d23;--text:#e7eaee;--muted:#98a2ae;--line:#2a3038;--accent:#7ea2ff;--accent-bg:#1f2b47;--up:#ff7b72;--down:#4cc38a;--head:#1f242b;--seq:126,162,255;--up-rgb:255,123,114;--down-rgb:76,195,138}}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 system-ui,-apple-system,"Segoe UI","Microsoft JhengHei","PingFang TC",sans-serif}
@@ -40,7 +40,20 @@ td.sym a:hover{color:var(--accent);text-decoration:underline}
 .tag{font-size:11px;border:1px solid var(--line);border-radius:4px;padding:0 4px;margin-left:6px;color:var(--muted);font-weight:400}
 .d{display:block;font-size:11px;color:var(--muted)}
 .up{color:var(--up)}.down{color:var(--down)}
-tbody tr:hover{background:var(--head)}
+tbody tr.row:hover{background:var(--head)}
+.exp{font:inherit;width:24px;height:24px;margin-right:6px;padding:0;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--muted);cursor:pointer;line-height:1}
+.exp:hover{color:var(--text);border-color:var(--muted)}
+.exp[aria-expanded=true]{background:var(--accent-bg);color:var(--accent);border-color:transparent}
+tr.detail td{text-align:left;white-space:normal;padding:12px 14px 16px;background:var(--bg)}
+.wkhead{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:12px;color:var(--muted);margin-bottom:8px}
+.wkhead b{color:var(--text);font-weight:600}
+.wkgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:2px}
+@media (min-width:1000px){.wkgrid{grid-template-columns:repeat(13,1fr)}}
+.wkgrid .c{border-radius:4px;padding:4px 6px;display:flex;flex-direction:column;line-height:1.3;border:1px solid var(--line)}
+.wkgrid .c:hover{border-color:var(--muted)}
+.wkgrid .l{font-size:10px;color:var(--muted)}
+.wkgrid .v{font-size:12px;font-variant-numeric:tabular-nums}
+.wkgrid .now{outline:2px solid var(--accent);outline-offset:-1px}
 .foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;color:var(--muted);font-size:13px}
 .pager button{font:inherit;color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:5px 12px;cursor:pointer}
 .pager button:disabled{opacity:.4;cursor:default}
@@ -77,6 +90,7 @@ tbody tr:hover{background:var(--head)}
   <div class="note">
     <b>週期</b>：日＝最近 1 個交易日、3日＝3 個交易日、週＝5 個交易日、月＝21 個交易日。每格上方是最近一期的數值，下方小字是與「前一個同長度週期」相比的變化（百分點）。<br>
     <b>振幅</b>＝（期間最高價 − 最低價）÷ 期間開始前一日收盤價。<b>歷史波動率</b>＝期間內每日對數報酬率的標準差 × √252（年化；單日無法計算，3 日只有 3 個樣本，僅供參考）。<b>漲跌幅</b>＝期末收盤價 ÷ 期間開始前一日收盤價 − 1。<br>
+    <b>每週明細</b>：點代號左邊的 ▸ 展開最近 52 週（ISO 週次，週一到週五）每一週的數值，跟著上方選的指標切換；顏色越深表示數值越大，藍框是尚未結束的本週。<br>
     價格為還原權息後的日線（Yahoo Finance）；日均成交額為近 20 日平均。紅色表示上升、綠色表示下降。資料僅供參考，非投資建議。
   </div>
 </main>
@@ -84,7 +98,7 @@ tbody tr:hover{background:var(--head)}
 <script>
 const METRICS=[["amp","振幅"],["hv","歷史波動率"],["ret","漲跌幅"]];
 const WIN=["日","3日","週","月"];
-const S={metric:0,mode:"val",type:"all",broker:0,q:"",minPrice:1,minVol:1,sortCol:"w2",dir:-1,page:0};
+const S={open:new Set(),metric:0,mode:"val",type:"all",broker:0,q:"",minPrice:1,minVol:1,sortCol:"w2",dir:-1,page:0};
 const PAGE=100;
 let D=null;
 const $=id=>document.getElementById(id);
@@ -140,12 +154,47 @@ function render(){
       const dc=d?(d>0?"up":"down"):"";
       return `<td><span class="${vc}">${pct(v,isRet)}</span><span class="d ${dc}">${d==null?"":pct(d,true).replace("%"," pt")}</span></td>`;
     }).join("");
-    return `<tr><td class="sym"><a href="https://finance.yahoo.com/quote/${encodeURIComponent(r[0].replace(".","-"))}" target="_blank" rel="noopener">${esc(r[0])}</a>${r[3]?'<span class="tag">ETF</span>':""}</td><td class="name" title="${esc(r[1])}">${esc(r[1])}</td><td>${esc(r[2])}</td><td>${r[4].toFixed(2)}</td><td>${money(r[5])}</td>${cells}</tr>`;
+    const open=S.open.has(r[0]);
+    return `<tr class="row"><td class="sym"><button type="button" class="exp" data-sym="${esc(r[0])}" aria-expanded="${open}" aria-label="展開 ${esc(r[0])} 每週明細">${open?"▾":"▸"}</button><a href="https://finance.yahoo.com/quote/${encodeURIComponent(r[0].replace(".","-"))}" target="_blank" rel="noopener">${esc(r[0])}</a>${r[3]?'<span class="tag">ETF</span>':""}</td><td class="name" title="${esc(r[1])}">${esc(r[1])}</td><td>${esc(r[2])}</td><td>${r[4].toFixed(2)}</td><td>${money(r[5])}</td>${cells}</tr>`+(open?`<tr class="detail" data-for="${esc(r[0])}"><td colspan="9"><div class="wk">載入中…</div></td></tr>`:"");
   }).join("");
+  document.querySelectorAll("tr.detail").forEach(tr=>fillDetail(tr.dataset.for));
   $("empty").hidden=all.length>0;
   $("count").textContent=`符合 ${all.length.toLocaleString()} 檔／共 ${D.rows.length.toLocaleString()} 檔`;
   $("page").textContent=`${S.page+1} / ${pages}`;
   $("prev").disabled=S.page===0; $("next").disabled=S.page>=pages-1;
+}
+
+const WK={};
+function loadWeekly(sym){
+  const b=/^[A-Za-z]/.test(sym)?sym[0].toUpperCase():"_";
+  return WK[b]??=fetch(`weekly/${b}.json`,{cache:"no-store"}).then(r=>r.ok?r.json():{}).catch(()=>({}));
+}
+function fillDetail(sym){
+  const m=S.metric;
+  loadWeekly(sym).then(d=>{
+    const tr=[...document.querySelectorAll("tr.detail")].find(t=>t.dataset.for===sym);
+    if(!tr||m!==S.metric)return;
+    const el=tr.querySelector(".wk"), arr=d[sym]&&d[sym][m], weeks=D.weeks||[];
+    if(!arr){el.textContent="沒有這檔的每週資料（排程下次執行後會產生）。";return}
+    const vals=arr.map(v=>v==null?null:v/1e4), have=vals.filter(v=>v!=null), isRet=m===2;
+    if(!have.length){el.textContent="這檔在最近 52 週沒有足夠的資料。";return}
+    const max=Math.max(...have.map(Math.abs))||1, avg=have.reduce((a,b)=>a+b,0)/have.length;
+    const hi=vals.indexOf(Math.max(...have)), lo=vals.indexOf(Math.min(...have));
+    const cells=vals.map((v,i)=>{
+      const [y,w]=(weeks[i]||"-").split("-"), last=i===vals.length-1;
+      const rgb=isRet?(v>0?"var(--up-rgb)":"var(--down-rgb)"):"var(--seq)";
+      const bg=v==null?"transparent":`rgba(${rgb},${(Math.abs(v)/max*0.5).toFixed(3)})`;
+      const lab=(i===0||w==="W01"?y+" ":"")+w;
+      return `<div class="c${last?" now":""}" style="background:${bg}" title="${weeks[i]}${last?"（本週至今）":""}：${pct(v,isRet)}"><span class="l">${lab}</span><span class="v">${pct(v,isRet)}</span></div>`;
+    }).join("");
+    el.innerHTML=`<div class="wkhead"><span><b>${esc(sym)}</b> 每週${METRICS[m][1]}．${weeks[0]} ～ ${weeks[weeks.length-1]}</span><span>平均 <b>${pct(avg,isRet)}</b></span><span>最高 <b>${pct(vals[hi],isRet)}</b>（${weeks[hi]}）</span><span>最低 <b>${pct(vals[lo],isRet)}</b>（${weeks[lo]}）</span></div><div class="wkgrid">${cells}</div>`;
+  });
+}
+function bodyClick(e){
+  const b=e.target.closest(".exp"); if(!b)return;
+  const sym=b.dataset.sym; S.open.has(sym)?S.open.delete(sym):S.open.add(sym);
+  render();
+  const again=[...document.querySelectorAll(".exp")].find(x=>x.dataset.sym===sym); if(again)again.focus();
 }
 
 function headClick(e){
@@ -174,6 +223,7 @@ fetch("data.json",{cache:"no-store"}).then(r=>{if(!r.ok)throw new Error(r.status
   $("q").oninput=e=>{S.q=e.target.value;S.page=0;render()};
   $("minPrice").oninput=e=>{S.minPrice=+e.target.value||0;S.page=0;render()};
   $("minVol").oninput=e=>{S.minVol=+e.target.value||0;S.page=0;render()};
+  $("body").addEventListener("click",bodyClick);
   $("head").addEventListener("click",headClick); $("head").addEventListener("keydown",headClick);
   $("prev").onclick=()=>{S.page--;render()}; $("next").onclick=()=>{S.page++;render()};
   render();
